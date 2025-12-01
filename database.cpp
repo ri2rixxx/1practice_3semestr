@@ -310,7 +310,63 @@ void saveDatabase(const Database& db, const string& filename) {
         }
     }
     
+    int hashTableCount = db.hashTables.size();
+    file.write(reinterpret_cast<const char*>(&hashTableCount), sizeof(hashTableCount));
+    
+    for (const HashTable* table : db.hashTables) {
+        // Сохраняем имя таблицы
+        int nameLength = table->name.length();
+        file.write(reinterpret_cast<const char*>(&nameLength), sizeof(nameLength));
+        file.write(table->name.c_str(), nameLength);
+        
+        // Сохраняем количество элементов в таблице
+        file.write(reinterpret_cast<const char*>(&table->size), sizeof(table->size));
+        
+        // Сохраняем все пары ключ-значение
+        for (int i = 0; i < table->capacity; i++) {
+            HashEntry* entry = table->buckets[i];
+            while (entry != nullptr) {
+                // Сохраняем ключ
+                int keyLength = entry->key.length();
+                file.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
+                file.write(entry->key.c_str(), keyLength);
+                
+                // Сохраняем значение
+                int valueLength = entry->value.length();
+                file.write(reinterpret_cast<const char*>(&valueLength), sizeof(valueLength));
+                file.write(entry->value.c_str(), valueLength);
+                
+                entry = entry->next;
+            }
+        }
+    }
+    
+    int setCount = db.sets.size();
+    file.write(reinterpret_cast<const char*>(&setCount), sizeof(setCount));
+    
+    for (const Set* set : db.sets) {
+        // Сохраняем имя множества
+        int nameLength = set->name.length();
+        file.write(reinterpret_cast<const char*>(&nameLength), sizeof(nameLength));
+        file.write(set->name.c_str(), nameLength);
+        
+        // Сохраняем количество элементов в множестве
+        file.write(reinterpret_cast<const char*>(&set->size), sizeof(set->size));
+        
+        // Сохраняем все элементы множества
+        for (int i = 0; i < set->capacity; i++) {
+            SetNode* node = set->buckets[i];
+            while (node != nullptr) {
+                int valueLength = node->value.length();
+                file.write(reinterpret_cast<const char*>(&valueLength), sizeof(valueLength));
+                file.write(node->value.c_str(), valueLength);
+                node = node->next;
+            }
+        }
+    }
+    
     file.close();
+    cout << "База данных успешно сохранена в файл: " << filename << endl;
 }
 
 void loadDatabase(Database& db, const string& filename) {
@@ -380,6 +436,85 @@ void loadDatabase(Database& db, const string& filename) {
         }
         
         db.queues.push_back(queue);
+    }
+    
+    int hashTableCount;
+    file.read(reinterpret_cast<char*>(&hashTableCount), sizeof(hashTableCount));
+    
+    for (int i = 0; i < hashTableCount; i++) {
+        HashTable* table = new HashTable;
+        
+        // Загружаем имя таблицы
+        int nameLength;
+        file.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
+        char* nameBuffer = new char[nameLength + 1];
+        file.read(nameBuffer, nameLength);
+        nameBuffer[nameLength] = '\0';
+        initHashTable(*table, string(nameBuffer));
+        delete[] nameBuffer;
+        
+        // Загружаем количество элементов
+        int size;
+        file.read(reinterpret_cast<char*>(&size), sizeof(size));
+        
+        // Загружаем все пары ключ-значение
+        for (int j = 0; j < size; j++) {
+            // Загружаем ключ
+            int keyLength;
+            file.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
+            char* keyBuffer = new char[keyLength + 1];
+            file.read(keyBuffer, keyLength);
+            keyBuffer[keyLength] = '\0';
+            string key = string(keyBuffer);
+            delete[] keyBuffer;
+            
+            // Загружаем значение
+            int valueLength;
+            file.read(reinterpret_cast<char*>(&valueLength), sizeof(valueLength));
+            char* valueBuffer = new char[valueLength + 1];
+            file.read(valueBuffer, valueLength);
+            valueBuffer[valueLength] = '\0';
+            string value = string(valueBuffer);
+            delete[] valueBuffer;
+            
+            // Добавляем в хеш-таблицу
+            hashSet(*table, key, value);
+        }
+        
+        db.hashTables.push_back(table);
+    }
+
+    int setCount;
+    file.read(reinterpret_cast<char*>(&setCount), sizeof(setCount));
+    
+    for (int i = 0; i < setCount; i++) {
+        Set* set = new Set;
+        
+        // Загружаем имя множества
+        int nameLength;
+        file.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
+        char* nameBuffer = new char[nameLength + 1];
+        file.read(nameBuffer, nameLength);
+        nameBuffer[nameLength] = '\0';
+        initSet(*set, string(nameBuffer));
+        delete[] nameBuffer;
+        
+        // Загружаем количество элементов
+        int size;
+        file.read(reinterpret_cast<char*>(&size), sizeof(size));
+        
+        // Загружаем все элементы
+        for (int j = 0; j < size; j++) {
+            int valueLength;
+            file.read(reinterpret_cast<char*>(&valueLength), sizeof(valueLength));
+            char* valueBuffer = new char[valueLength + 1];
+            file.read(valueBuffer, valueLength);
+            valueBuffer[valueLength] = '\0';
+            setAdd(*set, string(valueBuffer));
+            delete[] valueBuffer;
+        }
+        
+        db.sets.push_back(set);
     }
     
     file.close();
